@@ -8,20 +8,40 @@
     h1, h2, h3 { color: #333; }
     label { display: inline-block; width: 240px; margin-bottom: 5px; }
     input[type="number"] { margin-bottom: 10px; padding: 5px; width: 120px; }
-    .common-flex { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 30px; }
-    .common-container, .diagram-container, .calc-container, .section, .formula {
-      padding: 15px; border: 1px solid #ccc; border-radius: 5px;
-      background-color: #f9f9f9; margin-bottom: 30px;
+    .common-flex {
+      display: flex;
+      gap: 20px;
+      align-items: stretch;
+      margin-bottom: 30px;
     }
-    .diagram-container, .calc-container { display: flex; gap: 20px; }
-    .diagram { flex: 1; text-align: center; }
-    .section { flex: 1; }
-    button { padding: 8px 15px; font-size: 14px; cursor: pointer; margin-top: 10px; }
-    img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+    .common-container, .diagram-stack, .diagram {
+      padding: 15px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      background-color: #f9f9f9;
+    }
+    .common-container, .diagram-stack {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+    .diagram-stack {
+      gap: 10px;
+    }
+    .diagram {
+      flex: 1;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    img {
+      max-width: 100%;
+      height: auto;
+      margin-top: 10px;
+    }
   </style>
-  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-  <script id="MathJax-script" async
-    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
   <h1>CPW & CPWG Calculator</h1>
@@ -41,14 +61,14 @@
       <input type="number" id="cpw-f" step="any" value="1"><br>
     </div>
 
-    <div class="diagram-container">
+    <div class="diagram-stack">
       <div class="diagram">
         <h2>CPW Cross Section</h2>
-        <img src="https://emlizard.github.io/main-page/images/diagram_CPW.png" alt="CPW Diagram" width="500px" height="auto">
+        <img src="https://emlizard.github.io/main-page/images/diagram_CPW.png" alt="CPW Diagram">
       </div>
       <div class="diagram">
         <h2>CPWG Cross Section</h2>
-        <img src="https://emlizard.github.io/main-page/images/diagram_CPWG.png" alt="CPWG Diagram" width="500px" height="auto">
+        <img src="https://emlizard.github.io/main-page/images/diagram_CPWG.png" alt="CPWG Diagram">
       </div>
     </div>
   </div>
