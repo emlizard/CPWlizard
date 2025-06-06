@@ -8,11 +8,14 @@
     h1, h2, h3 { color: #333; }
     label { display: inline-block; width: 240px; margin-bottom: 5px; }
     input[type="number"] { margin-bottom: 10px; padding: 5px; width: 120px; }
-    .common-container, .diagram-container, .calc-container, .section,
-    .formula { padding: 15px; border: 1px solid #ccc; border-radius: 5px;
-      background-color: #f9f9f9; margin-bottom: 30px; }
+    .common-flex { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 30px; }
+    .common-container, .diagram-container, .calc-container, .section, .formula {
+      padding: 15px; border: 1px solid #ccc; border-radius: 5px;
+      background-color: #f9f9f9; margin-bottom: 30px;
+    }
     .diagram-container, .calc-container { display: flex; gap: 20px; }
-    .diagram, .section { flex: 1; text-align: center; }
+    .diagram { flex: 1; text-align: center; }
+    .section { flex: 1; }
     button { padding: 8px 15px; font-size: 14px; cursor: pointer; margin-top: 10px; }
     img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
   </style>
@@ -23,28 +26,30 @@
 <body>
   <h1>CPW & CPWG Calculator</h1>
 
-  <div class="common-container">
-    <h2>Common Parameters</h2>
-    <label for="cpw-W">Signal Line Width (W) [mm]:</label>
-    <input type="number" id="cpw-W" step="any" value="2.0"><br>
-    <label for="cpw-h">Substrate Height (h) [mm]:</label>
-    <input type="number" id="cpw-h" step="any" value="1.6"><br>
-    <label for="cpw-t">Conductor Thickness (t) [µm]:</label>
-    <input type="number" id="cpw-t" step="any" value="35"><br>
-    <label for="cpw-eps">Dielectric Constant (εᵣ):</label>
-    <input type="number" id="cpw-eps" step="any" value="4.4"><br>
-    <label for="cpw-f">Frequency (f) [GHz]:</label>
-    <input type="number" id="cpw-f" step="any" value="1"><br>
-  </div>
-
-  <div class="diagram-container">
-    <div class="diagram">
-      <h2>CPW Cross Section</h2>
-      <img src="https://emlizard.github.io/main-page/images/diagram_CPW.png" alt="CPW Diagram">
+  <div class="common-flex">
+    <div class="common-container">
+      <h2>Common Parameters</h2>
+      <label for="cpw-W">Signal Line Width (W) [mm]:</label>
+      <input type="number" id="cpw-W" step="any" value="2.0"><br>
+      <label for="cpw-h">Substrate Height (h) [mm]:</label>
+      <input type="number" id="cpw-h" step="any" value="1.6"><br>
+      <label for="cpw-t">Conductor Thickness (t) [µm]:</label>
+      <input type="number" id="cpw-t" step="any" value="35"><br>
+      <label for="cpw-eps">Dielectric Constant (εᵣ):</label>
+      <input type="number" id="cpw-eps" step="any" value="4.4"><br>
+      <label for="cpw-f">Frequency (f) [GHz]:</label>
+      <input type="number" id="cpw-f" step="any" value="1"><br>
     </div>
-    <div class="diagram">
-      <h2>CPWG Cross Section</h2>
-      <img src="https://emlizard.github.io/main-page/images/diagram_CPWG.png" alt="CPWG Diagram">
+
+    <div class="diagram-container">
+      <div class="diagram">
+        <h2>CPW Cross Section</h2>
+        <img src="https://emlizard.github.io/main-page/images/diagram_CPW.png" alt="CPW Diagram">
+      </div>
+      <div class="diagram">
+        <h2>CPWG Cross Section</h2>
+        <img src="https://emlizard.github.io/main-page/images/diagram_CPWG.png" alt="CPWG Diagram">
+      </div>
     </div>
   </div>
 
