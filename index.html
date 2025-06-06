@@ -1,22 +1,24 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>CPW & CPWG Calculator</title>
   <style>
     body { font-family: Arial; margin: 30px; line-height: 1.6; }
     h1, h2, h3 { color: #333; }
     label { display: inline-block; width: 240px; margin-bottom: 5px; }
     input[type="number"] { margin-bottom: 10px; padding: 5px; width: 120px; }
-    .common-container, .diagram-container, .calc-container, .section {
-      padding: 15px; border: 1px solid #ccc; border-radius: 5px;
-      background-color: #f9f9f9; margin-bottom: 30px;
-    }
+    .common-container, .diagram-container, .calc-container, .section,
+    .formula { padding: 15px; border: 1px solid #ccc; border-radius: 5px;
+      background-color: #f9f9f9; margin-bottom: 30px; }
     .diagram-container, .calc-container { display: flex; gap: 20px; }
     .diagram, .section { flex: 1; text-align: center; }
     button { padding: 8px 15px; font-size: 14px; cursor: pointer; margin-top: 10px; }
     img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
   </style>
+  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+  <script id="MathJax-script" async
+    src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
   <h1>CPW & CPWG Calculator</h1>
@@ -76,24 +78,56 @@
     </div>
   </div>
 
+  <div class="formula">
+    <h2>Formulas Used</h2>
+    <p><strong>Effective Width:</strong></p>
+    \[
+    W_{\text{eff}} =
+    \begin{cases}
+      W, & t \le 0 \\
+      W + \dfrac{t}{\pi} \ln\left(1 + \dfrac{4 e h}{t} \right), & t > 0
+    \end{cases}
+    \]
+    <p><strong>Elliptic Modulus:</strong></p>
+    \[
+    k = \frac{W_{\text{eff}}}{W_{\text{eff}} + 2S}, \quad k' = \sqrt{1 - k^2}
+    \]
+    <p><strong>Effective Permittivity (CPW):</strong></p>
+    \[
+    \epsilon_{\text{eff,0}} = \frac{\epsilon_r + 1}{2} + \frac{\epsilon_r - 1}{2} \cdot \frac{K(k_1)}{K(k_1')}
+    \]
+    \[
+    \epsilon_{\text{eff}} = \epsilon_{\text{eff,0}} + (\epsilon_r - \epsilon_{\text{eff,0}}) \left(1 - e^{-f/f_p} \right)
+    \]
+    <p><strong>Characteristic Impedance (CPW):</strong></p>
+    \[
+    Z_0 = \frac{30\pi}{\sqrt{\epsilon_{\text{eff}}}} \cdot \frac{K(k')}{K(k)}
+    \]
+    <p><strong>Effective Permittivity (CPWG):</strong></p>
+    \[
+    \epsilon_{\text{eff}} = \epsilon_r - 0.5 + 0.5 \cdot \left(1 - e^{-f/f_p} \right)
+    \]
+    <p><strong>Characteristic Impedance (CPWG):</strong></p>
+    \[
+    Z_0 = \frac{30\pi}{\sqrt{\epsilon_{\text{eff}}}} \cdot \frac{K(k')}{K(k)}
+    \]
+  </div>
+
   <script>
     const c = 3e8;
-
     function ellipticK(k) {
       let a = 1, b = Math.sqrt(1 - k * k), tol = 1e-9;
       while (Math.abs(a - b) > tol) {
-        let a_next = (a + b) / 2;
-        let b_next = Math.sqrt(a * b);
-        a = a_next;
-        b = b_next;
+        let aNext = (a + b) / 2;
+        let bNext = Math.sqrt(a * b);
+        a = aNext;
+        b = bNext;
       }
       return Math.PI / (2 * a);
     }
-
     function effectiveWidth(W, t, h) {
       return t <= 0 ? W : W + (t / Math.PI) * Math.log(1 + (4 * Math.E * h) / t);
     }
-
     function getCommonParams() {
       return {
         W: parseFloat(document.getElementById("cpw-W").value) / 1000,
@@ -103,7 +137,6 @@
         f: parseFloat(document.getElementById("cpw-f").value)
       };
     }
-
     function calcZ0_CPW(W, S, eps_r, h, t, f) {
       let W_eff = effectiveWidth(W, t, h);
       let k = W_eff / (W_eff + 2 * S);
@@ -116,59 +149,52 @@
       let eps_eff = eps_eff0 + (eps_r - eps_eff0) * (1 - Math.exp(-f_Hz / f_p));
       return (30 * Math.PI / Math.sqrt(eps_eff)) * (ellipticK(kp) / ellipticK(k));
     }
-
     function calcZ0_CPWG(W, S, eps_r, h, t, f) {
       let W_eff = effectiveWidth(W, t, h);
       let k = W_eff / (W_eff + 2 * S);
       let kp = Math.sqrt(1 - k * k);
       let f_Hz = f * 1e9;
       let f_p = c / (4 * h * Math.sqrt(eps_r));
-      let delta = 0.5;
-      let eps_eff = eps_r - delta + delta * (1 - Math.exp(-f_Hz / f_p));
+      let eps_eff = eps_r - 0.5 + 0.5 * (1 - Math.exp(-f_Hz / f_p));
       return (30 * Math.PI / Math.sqrt(eps_eff)) * (ellipticK(kp) / ellipticK(k));
     }
-
     function findS(targetZ0, W, eps_r, h, t, f, isCPWG = false) {
       function Z(S) {
         return isCPWG ? calcZ0_CPWG(W, S, eps_r, h, t, f) : calcZ0_CPW(W, S, eps_r, h, t, f);
       }
-      let S = 0.2 * W, tol = 1e-9;
+      let S = 0.2 * W;
       for (let i = 0; i < 100; i++) {
         let f_val = Z(S) - targetZ0;
         let dZ = (Z(S + 1e-6) - Z(S - 1e-6)) / 2e-6;
         if (Math.abs(dZ) < 1e-12) break;
         let S_next = S - f_val / dZ;
-        if (Math.abs(S_next - S) < tol) return S_next;
+        if (Math.abs(S_next - S) < 1e-9) return S_next;
         S = S_next;
       }
       return S;
     }
-
     function calculateZ0_CPW() {
-      let p = getCommonParams();
-      let S = parseFloat(document.getElementById("cpw-S").value) / 1000;
-      let Z0 = calcZ0_CPW(p.W, S, p.eps_r, p.h, p.t, p.f);
+      const p = getCommonParams();
+      const S = parseFloat(document.getElementById("cpw-S").value) / 1000;
+      const Z0 = calcZ0_CPW(p.W, S, p.eps_r, p.h, p.t, p.f);
       document.getElementById("resultZ0_CPW").innerHTML = `Z₀ (CPW) = ${Z0.toFixed(2)} Ω`;
     }
-
     function calculateS_CPW() {
-      let p = getCommonParams();
-      let targetZ0 = parseFloat(document.getElementById("cpw-targetZ0").value);
-      let S = findS(targetZ0, p.W, p.eps_r, p.h, p.t, p.f, false);
+      const p = getCommonParams();
+      const targetZ0 = parseFloat(document.getElementById("cpw-targetZ0").value);
+      const S = findS(targetZ0, p.W, p.eps_r, p.h, p.t, p.f);
       document.getElementById("resultS_CPW").innerHTML = `Slot Width S = ${(S * 1000).toFixed(3)} mm`;
     }
-
     function calculateZ0_CPWG() {
-      let p = getCommonParams();
-      let S = parseFloat(document.getElementById("cpwg-S").value) / 1000;
-      let Z0 = calcZ0_CPWG(p.W, S, p.eps_r, p.h, p.t, p.f);
+      const p = getCommonParams();
+      const S = parseFloat(document.getElementById("cpwg-S").value) / 1000;
+      const Z0 = calcZ0_CPWG(p.W, S, p.eps_r, p.h, p.t, p.f);
       document.getElementById("resultZ0_CPWG").innerHTML = `Z₀ (CPWG) = ${Z0.toFixed(2)} Ω`;
     }
-
     function calculateS_CPWG() {
-      let p = getCommonParams();
-      let targetZ0 = parseFloat(document.getElementById("cpwg-targetZ0").value);
-      let S = findS(targetZ0, p.W, p.eps_r, p.h, p.t, p.f, true);
+      const p = getCommonParams();
+      const targetZ0 = parseFloat(document.getElementById("cpwg-targetZ0").value);
+      const S = findS(targetZ0, p.W, p.eps_r, p.h, p.t, p.f, true);
       document.getElementById("resultS_CPWG").innerHTML = `Slot Width S = ${(S * 1000).toFixed(3)} mm`;
     }
   </script>
