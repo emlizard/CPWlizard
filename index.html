@@ -4,55 +4,19 @@
   <meta charset="UTF-8">
   <title>CPW & CPWG Calculator</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 30px;
-      line-height: 1.6;
+    body { font-family: Arial; margin: 30px; line-height: 1.6; }
+    h1, h2, h3 { color: #333; }
+    label { display: inline-block; width: 240px; margin-bottom: 5px; }
+    input[type="number"] { margin-bottom: 10px; padding: 5px; width: 120px; }
+    .common-container, .diagram-container, .calc-container, .section {
+      padding: 15px; border: 1px solid #ccc; border-radius: 5px;
+      background-color: #f9f9f9; margin-bottom: 30px;
     }
-    h1, h2, h3 {
-      color: #333;
-    }
-    label {
-      display: inline-block;
-      width: 240px;
-      margin-bottom: 5px;
-    }
-    input[type="number"] {
-      margin-bottom: 10px;
-      padding: 5px;
-      width: 120px;
-    }
-    .common-container, .diagram-container, .calc-container, .section,
-    .formula, .references {
-      padding: 15px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      background-color: #f9f9f9;
-      margin-bottom: 30px;
-    }
-    .diagram-container, .calc-container {
-      display: flex;
-      gap: 20px;
-    }
-    .diagram, .section {
-      flex: 1;
-      text-align: center;
-    }
-    button {
-      padding: 8px 15px;
-      font-size: 14px;
-      cursor: pointer;
-      margin-top: 10px;
-    }
-    img {
-      max-width: 100%;
-      height: auto;
-      display: block;
-      margin: 0 auto;
-    }
+    .diagram-container, .calc-container { display: flex; gap: 20px; }
+    .diagram, .section { flex: 1; text-align: center; }
+    button { padding: 8px 15px; font-size: 14px; cursor: pointer; margin-top: 10px; }
+    img { max-width: 100%; height: auto; display: block; margin: 0 auto; }
   </style>
-  <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
-  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
   <h1>CPW & CPWG Calculator</h1>
@@ -112,10 +76,101 @@
     </div>
   </div>
 
-  <!-- JS logic was previously confirmed as working and updated with English terms -->
   <script>
-    // JavaScript code is assumed complete, updated, and functional.
-    // If you want the entire JS code block again here, let me know!
+    const c = 3e8;
+
+    function ellipticK(k) {
+      let a = 1, b = Math.sqrt(1 - k * k), tol = 1e-9;
+      while (Math.abs(a - b) > tol) {
+        let a_next = (a + b) / 2;
+        let b_next = Math.sqrt(a * b);
+        a = a_next;
+        b = b_next;
+      }
+      return Math.PI / (2 * a);
+    }
+
+    function effectiveWidth(W, t, h) {
+      return t <= 0 ? W : W + (t / Math.PI) * Math.log(1 + (4 * Math.E * h) / t);
+    }
+
+    function getCommonParams() {
+      return {
+        W: parseFloat(document.getElementById("cpw-W").value) / 1000,
+        h: parseFloat(document.getElementById("cpw-h").value) / 1000,
+        t: parseFloat(document.getElementById("cpw-t").value) * 1e-6,
+        eps_r: parseFloat(document.getElementById("cpw-eps").value),
+        f: parseFloat(document.getElementById("cpw-f").value)
+      };
+    }
+
+    function calcZ0_CPW(W, S, eps_r, h, t, f) {
+      let W_eff = effectiveWidth(W, t, h);
+      let k = W_eff / (W_eff + 2 * S);
+      let kp = Math.sqrt(1 - k * k);
+      let k1 = Math.sinh(Math.PI * W_eff / (4 * h)) / Math.sinh(Math.PI * (W_eff + 2 * S) / (4 * h));
+      let k1p = Math.sqrt(1 - k1 * k1);
+      let eps_eff0 = (eps_r + 1) / 2 + ((eps_r - 1) / 2) * ellipticK(k1) / ellipticK(k1p);
+      let f_Hz = f * 1e9;
+      let f_p = c / (4 * h * Math.sqrt(eps_r));
+      let eps_eff = eps_eff0 + (eps_r - eps_eff0) * (1 - Math.exp(-f_Hz / f_p));
+      return (30 * Math.PI / Math.sqrt(eps_eff)) * (ellipticK(kp) / ellipticK(k));
+    }
+
+    function calcZ0_CPWG(W, S, eps_r, h, t, f) {
+      let W_eff = effectiveWidth(W, t, h);
+      let k = W_eff / (W_eff + 2 * S);
+      let kp = Math.sqrt(1 - k * k);
+      let f_Hz = f * 1e9;
+      let f_p = c / (4 * h * Math.sqrt(eps_r));
+      let delta = 0.5;
+      let eps_eff = eps_r - delta + delta * (1 - Math.exp(-f_Hz / f_p));
+      return (30 * Math.PI / Math.sqrt(eps_eff)) * (ellipticK(kp) / ellipticK(k));
+    }
+
+    function findS(targetZ0, W, eps_r, h, t, f, isCPWG = false) {
+      function Z(S) {
+        return isCPWG ? calcZ0_CPWG(W, S, eps_r, h, t, f) : calcZ0_CPW(W, S, eps_r, h, t, f);
+      }
+      let S = 0.2 * W, tol = 1e-9;
+      for (let i = 0; i < 100; i++) {
+        let f_val = Z(S) - targetZ0;
+        let dZ = (Z(S + 1e-6) - Z(S - 1e-6)) / 2e-6;
+        if (Math.abs(dZ) < 1e-12) break;
+        let S_next = S - f_val / dZ;
+        if (Math.abs(S_next - S) < tol) return S_next;
+        S = S_next;
+      }
+      return S;
+    }
+
+    function calculateZ0_CPW() {
+      let p = getCommonParams();
+      let S = parseFloat(document.getElementById("cpw-S").value) / 1000;
+      let Z0 = calcZ0_CPW(p.W, S, p.eps_r, p.h, p.t, p.f);
+      document.getElementById("resultZ0_CPW").innerHTML = `Z₀ (CPW) = ${Z0.toFixed(2)} Ω`;
+    }
+
+    function calculateS_CPW() {
+      let p = getCommonParams();
+      let targetZ0 = parseFloat(document.getElementById("cpw-targetZ0").value);
+      let S = findS(targetZ0, p.W, p.eps_r, p.h, p.t, p.f, false);
+      document.getElementById("resultS_CPW").innerHTML = `Slot Width S = ${(S * 1000).toFixed(3)} mm`;
+    }
+
+    function calculateZ0_CPWG() {
+      let p = getCommonParams();
+      let S = parseFloat(document.getElementById("cpwg-S").value) / 1000;
+      let Z0 = calcZ0_CPWG(p.W, S, p.eps_r, p.h, p.t, p.f);
+      document.getElementById("resultZ0_CPWG").innerHTML = `Z₀ (CPWG) = ${Z0.toFixed(2)} Ω`;
+    }
+
+    function calculateS_CPWG() {
+      let p = getCommonParams();
+      let targetZ0 = parseFloat(document.getElementById("cpwg-targetZ0").value);
+      let S = findS(targetZ0, p.W, p.eps_r, p.h, p.t, p.f, true);
+      document.getElementById("resultS_CPWG").innerHTML = `Slot Width S = ${(S * 1000).toFixed(3)} mm`;
+    }
   </script>
 </body>
 </html>
