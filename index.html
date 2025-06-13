@@ -375,33 +375,14 @@
       transform: translate(-50%, -50%);
     }
 
-    .diagram-cpw::after {
-      content: 'W';
-      position: absolute;
-      top: 45%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: white;
-      padding: 0.2rem 0.4rem;
-      border-radius: 4px;
-      font-weight: 600;
-      color: var(--primary);
-    }
+    
 
     .diagram-cpwg::before {
       height: 4px;
       background: linear-gradient(90deg, var(--primary), var(--accent));
     }
 
-    .diagram-cpwg::after {
-      content: 'Ground Plane';
-      position: absolute;
-      bottom: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      font-size: 0.8rem;
-      color: var(--accent);
-    }
+    
 
     /* Results Display */
     .result-display {
@@ -780,6 +761,7 @@
         <div class="diagram-container">
           <div class="diagram-title">Coplanar Waveguide</div>
           <div class="diagram diagram-cpw">
+            <img src="https://emlizard.github.io/main-page/images/diagram_CPW.png"></img>
             <div style="margin-top: 2rem;">
               Signal line and ground planes<br>on the same layer
             </div>
@@ -832,6 +814,7 @@
         <div class="diagram-container">
           <div class="diagram-title">CPW with Ground Plane</div>
           <div class="diagram diagram-cpwg">
+            <img src="https://emlizard.github.io/main-page/images/diagram_CPWG.png"></img>
             <div style="margin-top: 2rem;">
               CPW + bottom ground plane
             </div>
