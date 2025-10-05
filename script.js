@@ -1,0 +1,543 @@
+// MathJax Configuration
+    window.MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        displayMath: [['$$', '$$'], ['\\[', '\\]']],
+        processEscapes: true,
+        processEnvironments: true
+      },
+      options: {
+        skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+      }
+    };
+
+    // Physical Constants
+    const SPEED_OF_LIGHT = 2.99792458e8; // m/s
+    const PI = Math.PI;
+
+    // Theme Management
+    function toggleTheme() {
+      const body = document.body;
+      const themeIcon = document.getElementById('themeIcon');
+      const currentTheme = body.getAttribute('data-theme');
+      
+      if (currentTheme === 'light') {
+        body.setAttribute('data-theme', 'dark');
+        themeIcon.className = 'fas fa-sun';
+      } else {
+        body.setAttribute('data-theme', 'light');
+        themeIcon.className = 'fas fa-moon';
+      }
+    }
+
+    // Utility Functions
+    function getInputParameters() {
+      return {
+        W: parseFloat(document.getElementById("signal-width").value) / 1000,        // Convert mm to m
+        h: parseFloat(document.getElementById("substrate-thickness").value) / 1000, // Convert mm to m
+        t: parseFloat(document.getElementById("conductor-thickness").value) * 1e-6,  // Convert µm to m
+        eps_r: parseFloat(document.getElementById("permittivity").value),
+        f: parseFloat(document.getElementById("frequency").value) * 1e9              // Convert GHz to Hz
+      };
+    }
+
+    function validateInputs(params) {
+      if (params.W <= 0 || params.h <= 0 || params.t < 0 || params.eps_r < 1 || params.f < 0) {
+        throw new Error('Invalid input parameters');
+      }
+    }
+
+    function updateResultValue(elementId, value, unit = '') {
+      const element = document.getElementById(elementId);
+      if (element) {
+        element.textContent = value + unit;
+        element.classList.add('updated');
+        setTimeout(() => element.classList.remove('updated'), 500);
+      }
+    }
+
+    function updateDebugInfo(type, info) {
+      const element = document.getElementById(`${type}-debug`);
+      if (element) {
+        element.textContent = info;
+      }
+    }
+
+    function toggleDebug(type) {
+      const debugSection = document.getElementById(`${type}-debug`);
+      const checkbox = document.getElementById(`${type}-debug-toggle`);
+      
+      if (checkbox.checked) {
+        debugSection.classList.add('show');
+      } else {
+        debugSection.classList.remove('show');
+      }
+    }
+
+    function showError(message) {
+      const errorDiv = document.createElement('div');
+      errorDiv.className = 'error-message';
+      errorDiv.innerHTML = `
+        <i class="fas fa-exclamation-triangle"></i>
+        ${message}
+      `;
+      
+      document.body.appendChild(errorDiv);
+      setTimeout(() => errorDiv.remove(), 4000);
+    }
+
+    // Mathematical Functions
+    function effectiveWidth(W, t, h) {
+      if (t <= 0) return W;
+      
+      // Enhanced effective width calculation (Wadell, 1991)
+      if (t < 0.1 * W) {
+        return W + (t / PI) * (1 + Math.log(4 * PI * W / t));
+      }
+      
+      return W + (t / PI) * Math.log(1 + (4 * Math.E * h) / t);
+    }
+
+    // Calculate K(k)/K'(k) ratio using Hilberg approximation
+    // Returns: K(k)/K'(k) where K is complete elliptic integral of first kind
+    // Input: k (elliptic modulus, 0 ≤ k ≤ 1)
+    function ellipticIntegralRatio(k) {
+      if (k < 0 || k > 1) return NaN;
+      if (k === 0) return 0;
+      if (k === 1) return Infinity;
+      
+      const k_threshold = 1.0 / Math.sqrt(2);
+      
+      if (k <= k_threshold) {
+        // For k ≤ 1/√2, calculate K(k)/K'(k) directly
+        const sqrt_k = Math.sqrt(k);
+        return (1 / PI) * Math.log(2 * (1 + sqrt_k) / (1 - sqrt_k));
+      } else {
+        // For k > 1/√2, use reciprocal property: K(k)/K'(k) = 1/[K'(k)/K(k)]
+        const kp = Math.sqrt(1 - k * k);  // k' = √(1-k²)
+        const sqrt_kp = Math.sqrt(kp);
+        const K_kp_over_K_k = (1 / PI) * Math.log(2 * (1 + sqrt_kp) / (1 - sqrt_kp));
+        return 1 / K_kp_over_K_k;
+      }
+    }
+
+    // CPW Calculation
+    function calculateCPW(W, S, eps_r, h, t, f) {
+      try {
+        const W_eff = effectiveWidth(W, t, h);
+        const k = W_eff / (W_eff + 2 * S);
+        
+        // CPW: sinh for infinite substrate model
+        const arg1 = (PI * W_eff) / (4 * h);
+        const arg2 = (PI * (W_eff + 2 * S)) / (4 * h);
+        const k1 = Math.sinh(arg1) / Math.sinh(arg2);
+        
+        let debug = `CPW Calculation Debug:\n`;
+        debug += `W_eff = ${(W_eff * 1000).toFixed(3)} mm\n`;
+        debug += `k = ${k.toFixed(6)}\n`;
+        debug += `k1 = ${k1.toFixed(6)} (using sinh)\n`;
+        
+        // Effective permittivity calculation
+        let eps_eff;
+        if (eps_r === 1) {
+          eps_eff = 1;
+          debug += `Air case: εₑff = 1\n`;
+        } else {
+          const K_k1_ratio = ellipticIntegralRatio(k1);
+          let eps_eff_static = (eps_r + 1) / 2 + ((eps_r - 1) / 2) * K_k1_ratio;
+          
+          debug += `K(k1)/K'(k1) = ${K_k1_ratio.toFixed(6)}\n`;
+          debug += `εₑff,static = ${eps_eff_static.toFixed(6)}\n`;
+          
+          // Frequency dispersion
+          if (f > 0) {
+            const f_p = SPEED_OF_LIGHT / (4 * h * Math.sqrt(eps_r));
+            const dispersion_factor = 1 - Math.exp(-f / f_p);
+            eps_eff = eps_eff_static + (eps_r - eps_eff_static) * dispersion_factor;
+            
+            debug += `f_p = ${(f_p / 1e9).toFixed(3)} GHz\n`;
+            debug += `Dispersion factor = ${dispersion_factor.toFixed(6)}\n`;
+            debug += `εₑff(f) = ${eps_eff.toFixed(6)}\n`;
+          } else {
+            eps_eff = eps_eff_static;
+          }
+        }
+        
+        // Characteristic impedance
+        const K_ratio = ellipticIntegralRatio(k);  // K(k)/K'(k)
+        const Z0 = (30 * PI / Math.sqrt(eps_eff)) / K_ratio;
+        
+        debug += `\nCharacteristic Impedance Calculation:\n`;
+        debug += `K(k)/K'(k) = ${K_ratio.toFixed(6)}\n`;
+        debug += `Z₀ = 30π/√εₑff × K'(k)/K(k)\n`;
+        debug += `Z₀ = 30π/√εₑff / (K(k)/K'(k))\n`;
+        debug += `Z₀ = ${Z0.toFixed(3)} Ω`;
+        
+        return { Z0, eps_eff, debug };
+      } catch (error) {
+        return { Z0: NaN, eps_eff: NaN, debug: `Error: ${error.message}` };
+      }
+    }
+
+    // CPWG Calculation
+    function calculateCPWG(W, S, eps_r, h, t, f) {
+      try {
+        const W_eff = effectiveWidth(W, t, h);
+        const k = W_eff / (W_eff + 2 * S);
+        
+        // CPWG: tanh for finite substrate with bottom ground
+        const arg1 = (PI * W_eff) / (4 * h);
+        const arg2 = (PI * (W_eff + 2 * S)) / (4 * h);
+        const k1 = Math.tanh(arg1) / Math.tanh(arg2);
+        
+        let debug = `CPWG Calculation Debug:\n`;
+        debug += `W_eff = ${(W_eff * 1000).toFixed(3)} mm\n`;
+        debug += `k = ${k.toFixed(6)}\n`;
+        debug += `k1 = ${k1.toFixed(6)} (using tanh)\n`;
+        
+        // Effective permittivity calculation (Wadell standard formula)
+        let eps_eff;
+        if (eps_r === 1) {
+          eps_eff = 1;
+          debug += `Air case: εₑff = 1 (same as CPW)\n`;
+        } else {
+          const K_k1_ratio = ellipticIntegralRatio(k1);
+          const K_k_ratio = ellipticIntegralRatio(k);
+          
+          // Wadell formula for CPWG: εₑff = (εᵣ+1)/2 × K(k₁)/K'(k₁) + (εᵣ-1)/2 × K(k)/K'(k)
+          let eps_eff_static = (eps_r + 1) / 2 * K_k1_ratio + (eps_r - 1) / 2 * K_k_ratio;
+          
+          debug += `K(k1)/K'(k1) = ${K_k1_ratio.toFixed(6)}\n`;
+          debug += `K(k)/K'(k) = ${K_k_ratio.toFixed(6)}\n`;
+          debug += `εₑff,static = ${eps_eff_static.toFixed(6)} (Wadell formula)\n`;
+          
+          // Frequency dispersion (enhanced for CPWG)
+          if (f > 0) {
+            const f_p = SPEED_OF_LIGHT / (4 * h * Math.sqrt(eps_r));
+            const dispersion_factor = 1 - Math.exp(-1.2 * f / f_p); // Enhanced dispersion
+            eps_eff = eps_eff_static + (eps_r - eps_eff_static) * dispersion_factor;
+            
+            debug += `f_p = ${(f_p / 1e9).toFixed(3)} GHz\n`;
+            debug += `Enhanced dispersion factor = ${dispersion_factor.toFixed(6)}\n`;
+            debug += `εₑff(f) = ${eps_eff.toFixed(6)}\n`;
+          } else {
+            eps_eff = eps_eff_static;
+          }
+          
+          // Physical constraint: εₑff should not exceed εᵣ
+          if (eps_eff > eps_r) {
+            eps_eff = eps_r * 0.99;
+            debug += `Capped at 99% of εᵣ\n`;
+          }
+        }
+        
+        // Characteristic impedance
+        const K_ratio = ellipticIntegralRatio(k);
+        const Z0 = (30 * PI / Math.sqrt(eps_eff)) / K_ratio;
+        
+        debug += `K(k)/K'(k) = ${K_ratio.toFixed(6)}\n`;
+        debug += `Z₀ = ${Z0.toFixed(3)} Ω`;
+        
+        return { Z0, eps_eff, debug };
+      } catch (error) {
+        return { Z0: NaN, eps_eff: NaN, debug: `Error: ${error.message}` };
+      }
+    }
+
+    // Slot Width Optimizer (Newton-Raphson method)
+    function findSlotWidth(targetZ0, W, eps_r, h, t, f, isCPWG = false) {
+      const calculateZ0 = (S) => {
+        const result = isCPWG ? calculateCPWG(W, S, eps_r, h, t, f) : calculateCPW(W, S, eps_r, h, t, f);
+        return result.Z0;
+      };
+      
+      // Initial bounds and guess
+      let S_min = 0.001 * W;  // Minimum practical slot width
+      let S_max = 20 * W;     // Maximum reasonable slot width
+      let S = Math.sqrt(S_min * S_max); // Geometric mean as initial guess
+      
+      const tolerance = 1e-9;
+      const maxIterations = 100;
+      const dampingFactor = 0.7;
+      
+      for (let i = 0; i < maxIterations; i++) {
+        // Ensure S is within bounds
+        S = Math.max(S_min, Math.min(S, S_max));
+        
+        const Z_current = calculateZ0(S);
+        
+        if (isNaN(Z_current) || !isFinite(Z_current)) {
+          console.warn(`Invalid Z0 at iteration ${i}: S = ${S * 1000} mm`);
+          S = S * 0.9; // Reduce slot width
+          continue;
+        }
+        
+        const error = Z_current - targetZ0;
+        
+        if (Math.abs(error) < tolerance) {
+          console.log(`Converged: S = ${(S * 1000).toFixed(3)} mm, Z0 = ${Z_current.toFixed(2)} Ω`);
+          return S;
+        }
+        
+        // Calculate numerical derivative
+        const dS = Math.max(S * 1e-6, 1e-12);
+        const Z_plus = calculateZ0(S + dS);
+        const Z_minus = calculateZ0(S - dS);
+        
+        if (isNaN(Z_plus) || isNaN(Z_minus)) {
+          console.warn(`Invalid derivative at iteration ${i}`);
+          // Use bisection fallback
+          if (error > 0) {
+            S = S * 0.95;
+          } else {
+            S = S * 1.05;
+          }
+          continue;
+        }
+        
+        const dZ_dS = (Z_plus - Z_minus) / (2 * dS);
+        
+        if (Math.abs(dZ_dS) < 1e-15) {
+          console.warn(`Derivative too small at iteration ${i}`);
+          // Use adaptive step
+          if (error > 0) {
+            S = S * 0.98;
+          } else {
+            S = S * 1.02;
+          }
+          continue;
+        }
+        
+        // Newton-Raphson step with damping
+        const S_next = S - dampingFactor * error / dZ_dS;
+        
+        // Ensure new S is within bounds
+        const S_bounded = Math.max(S_min, Math.min(S_next, S_max));
+        
+        if (Math.abs(S_bounded - S) < tolerance * S) {
+          console.log(`Converged: S = ${(S_bounded * 1000).toFixed(3)} mm after ${i + 1} iterations`);
+          return S_bounded;
+        }
+        
+        S = S_bounded;
+      }
+      
+      console.error(`Failed to converge after ${maxIterations} iterations. Final S = ${(S * 1000).toFixed(3)} mm`);
+      return S;
+    }
+
+    // Main Calculation Functions
+    function calculateImpedance() {
+      const button = event.target;
+      button.classList.add('calculating');
+      
+      setTimeout(() => {
+        try {
+          const params = getInputParameters();
+          validateInputs(params);
+          
+          const S = parseFloat(document.getElementById("slot-width").value) / 1000; // Convert mm to m
+          
+          if (isNaN(S) || S <= 0) {
+            throw new Error('Invalid slot width value');
+          }
+          
+          // Calculate both CPW and CPWG
+          const cpwResult = calculateCPW(params.W, S, params.eps_r, params.h, params.t, params.f);
+          const cpwgResult = calculateCPWG(params.W, S, params.eps_r, params.h, params.t, params.f);
+          
+          if (isNaN(cpwResult.Z0) || isNaN(cpwgResult.Z0)) {
+            throw new Error('Calculation failed - check input parameters');
+          }
+          
+          // Update CPW results
+          updateResultValue('cpw-impedance', cpwResult.Z0.toFixed(2), ' Ω');
+          updateResultValue('cpw-slot', (S * 1000).toFixed(3), ' mm');
+          updateResultValue('cpw-permittivity', cpwResult.eps_eff.toFixed(4));
+          updateDebugInfo('cpw', cpwResult.debug);
+          
+          // Update CPWG results
+          updateResultValue('cpwg-impedance', cpwgResult.Z0.toFixed(2), ' Ω');
+          updateResultValue('cpwg-slot', (S * 1000).toFixed(3), ' mm');
+          updateResultValue('cpwg-permittivity', cpwgResult.eps_eff.toFixed(4));
+          updateDebugInfo('cpwg', cpwgResult.debug);
+          
+        } catch (error) {
+          console.error('Impedance calculation error:', error);
+          showError('Calculation error: ' + error.message);
+          clearResults();
+        }
+        
+        button.classList.remove('calculating');
+      }, 100);
+    }
+
+    function calculateSlotWidth() {
+      const button = event.target;
+      button.classList.add('calculating');
+      
+      setTimeout(() => {
+        try {
+          const params = getInputParameters();
+          validateInputs(params);
+          
+          const targetZ0 = parseFloat(document.getElementById("target-impedance").value);
+          
+          if (isNaN(targetZ0) || targetZ0 <= 0) {
+            throw new Error('Invalid target impedance value');
+          }
+          
+          // Find slot widths for both CPW and CPWG
+          const cpwSlot = findSlotWidth(targetZ0, params.W, params.eps_r, params.h, params.t, params.f, false);
+          const cpwgSlot = findSlotWidth(targetZ0, params.W, params.eps_r, params.h, params.t, params.f, true);
+          
+          if (isNaN(cpwSlot) || isNaN(cpwgSlot) || cpwSlot <= 0 || cpwgSlot <= 0) {
+            throw new Error('Failed to find valid slot width');
+          }
+          
+          // Verify results
+          const cpwResult = calculateCPW(params.W, cpwSlot, params.eps_r, params.h, params.t, params.f);
+          const cpwgResult = calculateCPWG(params.W, cpwgSlot, params.eps_r, params.h, params.t, params.f);
+          
+          // Update CPW results
+          updateResultValue('cpw-impedance', cpwResult.Z0.toFixed(2), ' Ω');
+          updateResultValue('cpw-slot', (cpwSlot * 1000).toFixed(3), ' mm');
+          updateResultValue('cpw-permittivity', cpwResult.eps_eff.toFixed(4));
+          updateDebugInfo('cpw', cpwResult.debug);
+          
+          // Update CPWG results
+          updateResultValue('cpwg-impedance', cpwgResult.Z0.toFixed(2), ' Ω');
+          updateResultValue('cpwg-slot', (cpwgSlot * 1000).toFixed(3), ' mm');
+          updateResultValue('cpwg-permittivity', cpwgResult.eps_eff.toFixed(4));
+          updateDebugInfo('cpwg', cpwgResult.debug);
+          
+        } catch (error) {
+          console.error('Slot width calculation error:', error);
+          showError('Calculation error: ' + error.message);
+          clearResults();
+        }
+        
+        button.classList.remove('calculating');
+      }, 100);
+    }
+
+    function clearResults() {
+      updateResultValue('cpw-impedance', '--', ' Ω');
+      updateResultValue('cpw-slot', '--', ' mm');
+      updateResultValue('cpw-permittivity', '--');
+      updateResultValue('cpwg-impedance', '--', ' Ω');
+      updateResultValue('cpwg-slot', '--', ' mm');
+      updateResultValue('cpwg-permittivity', '--');
+      updateDebugInfo('cpw', 'Debug information will appear here when enabled.');
+      updateDebugInfo('cpwg', 'Debug information will appear here when enabled.');
+    }
+
+    // Input Validation
+    function setupInputValidation() {
+      const inputs = document.querySelectorAll('.input-field');
+      
+      inputs.forEach(input => {
+        input.addEventListener('input', function() {
+          const value = parseFloat(this.value);
+          
+          // Reset border color
+          this.style.borderColor = '';
+          this.title = '';
+          
+          // Validate based on input type
+          if (this.id === 'permittivity') {
+            if (isNaN(value) || value < 1) {
+              this.style.borderColor = 'var(--error)';
+              this.title = 'Relative permittivity must be ≥ 1';
+            } else {
+              this.style.borderColor = 'var(--success)';
+              this.title = 'Valid relative permittivity';
+            }
+          } else if (this.id === 'frequency') {
+            if (isNaN(value) || value < 0) {
+              this.style.borderColor = 'var(--error)';
+              this.title = 'Frequency must be ≥ 0';
+            } else {
+              this.style.borderColor = 'var(--success)';
+              this.title = 'Valid frequency';
+            }
+          } else if (this.id === 'conductor-thickness') {
+            if (isNaN(value) || value < 0) {
+              this.style.borderColor = 'var(--error)';
+              this.title = 'Conductor thickness must be ≥ 0';
+            } else {
+              this.style.borderColor = 'var(--success)';
+              this.title = 'Valid conductor thickness';
+            }
+          } else {
+            // All other inputs must be positive
+            if (isNaN(value) || value <= 0) {
+              this.style.borderColor = 'var(--error)';
+              this.title = 'Value must be positive';
+            } else {
+              this.style.borderColor = 'var(--success)';
+              this.title = 'Valid input';
+            }
+          }
+        });
+      });
+    }
+
+    // Keyboard Shortcuts
+    function setupKeyboardShortcuts() {
+      document.addEventListener('keydown', function(event) {
+        if (event.ctrlKey || event.metaKey) {
+          switch(event.key) {
+            case '1':
+              event.preventDefault();
+              calculateImpedance();
+              break;
+            case '2':
+              event.preventDefault();
+              calculateSlotWidth();
+              break;
+            case 'd':
+              event.preventDefault();
+              toggleTheme();
+              break;
+          }
+        }
+      });
+    }
+
+    // Animation Observer
+    function setupAnimations() {
+      const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+      };
+
+      const observer = new IntersectionObserver(function(entries) {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.style.animationDelay = Math.random() * 0.3 + 's';
+            entry.target.classList.add('animate-in');
+          }
+        });
+      }, observerOptions);
+
+      document.querySelectorAll('.card').forEach(card => {
+        observer.observe(card);
+      });
+    }
+
+    // Initialize Application
+    document.addEventListener('DOMContentLoaded', function() {
+      setupInputValidation();
+      setupKeyboardShortcuts();
+      setupAnimations();
+      
+      // Set initial theme
+      const savedTheme = 'light';
+      const themeIcon = document.getElementById('themeIcon');
+      document.body.setAttribute('data-theme', savedTheme);
+      themeIcon.className = 'fas fa-moon';
+      
+      console.log('CPW & CPWG Calculator initialized');
+      console.log('Keyboard shortcuts: Ctrl+1 (Calculate Z₀), Ctrl+2 (Find Slot Width), Ctrl+D (Toggle Theme)');
+    });
