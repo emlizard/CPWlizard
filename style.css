@@ -320,7 +320,22 @@
       padding: 0.625rem 1rem;
       font-size: 0.875rem;
     }
+    .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-secondary);
+      text-decoration: none;
+      padding: 0.75rem 1rem;
+      border-radius: var(--radius);
+      transition: var(--transition);
+      font-weight: 500;
+    }
 
+    .back-btn:hover {
+      color: var(--primary);
+      background: rgba(37, 99, 235, 0.1);
+    }
     /* Structure Diagrams */
     .diagram-container {
       text-align: center;
